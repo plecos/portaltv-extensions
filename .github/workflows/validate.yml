@@ -1,0 +1,44 @@
+name: Validate
+
+# Builds catalog.json from the entries and checks it with the very parser Portal uses
+# (CatalogFileTest in plecos/portaltv). Any problem at all fails the pull request.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/checkout@v7
+        with:
+          repository: plecos/portaltv
+          path: portaltv
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build catalog.json
+        run: python3 scripts/build-catalog.py build/catalog.json
+
+      - name: Stamp a throwaway copy (a high serial so Portal's minimum never fails it; the real stamp and signature are added offline)
+        run: |
+          cp build/catalog.json build/stamped.json
+          java portaltv/scripts/CatalogSign.java stamp build/stamped.json --serial 1000000
+
+      - name: Check with Portal's parser
+        run: portaltv/scripts/validate-catalog.sh "$PWD/build/stamped.json"
+
+      - name: Check that APKs still match their checksums
+        run: python3 scripts/check-apks.py build/catalog.json
